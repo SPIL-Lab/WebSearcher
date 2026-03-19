@@ -17,12 +17,18 @@ class SearchParams(BaseConfig):
     loc: str | None = Field(None, description="Location in Canonical Name format")
     base_url: str = Field("https://www.google.com/search", description="Base search engine URL")
     ai_expand: bool = Field(False, description="Expand AI overviews if present")
+    ai_mode: bool = Field(False, description="(Experimental) Generate AI Mode query")
     headers: dict[str, str] = Field(default_factory=dict, description="Custom headers")
 
     @computed_field
     def url_params(self) -> dict[str, Any]:
         """Generates a dictionary of URL parameters based on the search parameters"""
         params = {"q": utils.encode_param_value(self.qry)}
+        
+        # Add AI Mode parameter if enabled
+        if self.ai_mode:
+            params["udm"] = "50"
+
         opt_params = {
             "num": self.num_results,
             "hl": self.lang,
