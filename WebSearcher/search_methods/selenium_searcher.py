@@ -1,4 +1,5 @@
 import time
+import random
 from datetime import datetime, timezone
 
 import orjson
@@ -74,11 +75,12 @@ class SeleniumDriver:
             time.sleep(2)
             if search_params.ai_mode:
                 # Double check if still necessary
-                WebDriverWait(self.driver, 10).until(
-                    EC.visibility_of_element_located(
-                        (By.CSS_SELECTOR, 'button[aria-label="Positive feedback"]')
-                    )
-                )
+                # WebDriverWait(self.driver, 10).until(
+                #     EC.visibility_of_element_located(
+                #         (By.CSS_SELECTOR, 'button[aria-label="Positive feedback"]')
+                #     )
+                # )
+                pass
             else:
                 WebDriverWait(self.driver, 10).until(
                     EC.presence_of_element_located((By.ID, "search"))
@@ -90,12 +92,12 @@ class SeleniumDriver:
 
             # Expand AI overview if requested
             if search_params.ai_expand:
-                expanded_html = self.expand_ai_overview()
+                expanded_html = self.expand_ai_overview(search_params)
                 if expanded_html:
                     len_diff = len(expanded_html) - len(response_output.html)
                     self.log.debug(f"SERP | expanded html | len diff: {len_diff}")
                     response_output.html = expanded_html
-                    citation_data = self.collect_citations()
+                    citation_data = self.collect_citations(search_params)
                 response_output.citations = citation_data
 
         except Exception as e:
@@ -105,7 +107,7 @@ class SeleniumDriver:
 
         return response_output
 
-    def expand_ai_overview(self):
+    def expand_ai_overview(self, search_params):
         """Expand AI overview box by clicking it
         Somewhat gratuitous expansion to this function,
         compatible with AI Mode windows. Possibly deprecated."""
@@ -113,41 +115,73 @@ class SeleniumDriver:
         # show_all_button_xpath = '//div[contains(@class, "trEk7e") and @role="button"]'
 
         XPATHS = {
+            "reject_all": "//button[.//div[text()='Alle ablehnen']]",
             "show_more": "//div[@jsname='rPRdsc' and @role='button']",
             "show_all": '//div[@role="button" and .//span[text()="Show all"]]',
             "not_now": '//g-raised-button[@role="button" and .//div[normalize-space(.)="Not now"]]',
         }
 
+        debug = True
+
+        def dbg(*args):
+            if debug:
+                print("[expand_ai_overview]", *args)
+
         def try_click(xpath, timeout=1):
+            dbg(f"Attempting click: {xpath}")
             try:
                 el = WebDriverWait(self.driver, timeout).until(
                     EC.element_to_be_clickable((By.XPATH, xpath))
                 )
                 el.click()
+                dbg(f"Click succeeded: {xpath}")
                 return True
-            except (TimeoutException, Exception):
+            except Exception as e:
+                dbg(f"Click failed: {xpath} — {type(e).__name__}: {e}")
                 return False
 
-        # AI Mode Expansion
-        if search_params.ai_mode:
-            try_click(XPATHS["show_all"])
-            return self.driver.page_source
+        dbg(f"ai_mode={search_params.ai_mode}")
 
-        # AI Overview expansion
+        if search_params.ai_mode:
+            dbg("Branch: AI mode")
+
+            dbg("Checking for reject_all button...")
+            rejected = try_click(XPATHS["reject_all"])
+            dbg(f"reject_all result: {'clicked' if rejected else 'not found/skipped'}")
+
+            dbg("Checking for show_all button...")
+            showed = try_click(XPATHS["show_all"])
+            dbg(f"show_all result: {'clicked' if showed else 'not found/skipped'}")
+
+            dbg("Grabbing page source...")
+            source = self.driver.page_source
+            dbg(f"Page source length: {len(source)} chars")
+            return source
+
+        # Standard (non-AI mode) expansion
+        dbg("Branch: standard mode")
         expanded_source = None
 
+        dbg("Checking for not_now button...")
         if try_click(XPATHS["not_now"]):
+            dbg("not_now clicked, sleeping 2s...")
             time.sleep(2)
             expanded_source = self.driver.page_source
+            dbg(f"Page source grabbed after not_now: {len(expanded_source)} chars")
 
+        dbg("Checking for show_more button...")
         if try_click(XPATHS["show_more"]):
+            dbg("show_more clicked, sleeping 2s...")
             time.sleep(2)
+            dbg("Checking for show_all after show_more...")
             try_click(XPATHS["show_all"])
             expanded_source = self.driver.page_source
+            dbg(f"Page source grabbed after show_more: {len(expanded_source)} chars")
 
+        dbg(f"Returning source: {'None' if expanded_source is None else f'{len(expanded_source)} chars'}")
         return expanded_source
 
-    def collect_citations(self, max_wait_time=2):
+    def collect_citations(self, search_params, max_wait_time=2):
         """Collect citation URLs by clicking each source button and scraping visible links."""
         content_data = {}
         processed_buttons = set()
@@ -160,7 +194,13 @@ class SeleniumDriver:
                     "key_attr": "data-icl-uuid",
                     "key_via_parent": False,
                     "link_class": "NDNGvf",
-                }
+                },
+                {
+                    "xpath": "//button[contains(@class, 'rBl3me') and @data-amic='true' and @data-icl-uuid]",
+                    "key_attr": "data-icl-uuid",
+                    "key_via_parent": False,
+                    "link_class": "NDNGvf",
+                },
             ],
             "standard": [
                 {

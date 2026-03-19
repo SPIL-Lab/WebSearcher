@@ -9,6 +9,7 @@ class ResponseOutput(BaseModel):
     user_agent: str = ""
     response_code: int = 0
     timestamp: str = ""
+    citations: dict = {}
 
 
 class ParsedSERP(BaseModel):
