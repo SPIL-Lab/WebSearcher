@@ -36,7 +36,7 @@ def write_lines(iter_data, fp: str | Path, overwrite=False):
     fp = Path(fp)
     mode = "w" if overwrite else "a+"
 
-    with open(fp, mode) as outfile:
+    with open(fp, mode, encoding='utf-8') as outfile:
         for data in iter_data:
             if fp.suffix == ".json":
                 line_output = orjson.dumps(data).decode("utf-8")

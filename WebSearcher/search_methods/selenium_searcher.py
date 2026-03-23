@@ -183,10 +183,15 @@ class SeleniumDriver:
 
     def collect_citations(self, search_params, max_wait_time=2):
         """Collect citation URLs by clicking each source button and scraping visible links."""
+        debug = True
+
+        def dbg(*args):
+            if debug:
+                print("[collect_citations]", *args)
+
         content_data = {}
         processed_buttons = set()
 
-        # Config per mode: (xpath, key_attr, key_via_parent, link_class)
         BUTTON_CONFIGS = {
             "ai_mode": [
                 {
@@ -218,70 +223,126 @@ class SeleniumDriver:
             ],
         }
 
-        configs = BUTTON_CONFIGS["ai_mode" if search_params.ai_mode else "standard"]
+        CLOSE_BUTTON_XPATH = '//button[contains(@class, "hXknlc")]'
+
+        def try_close_dialog():
+            try:
+                close_btn = WebDriverWait(self.driver, 1).until(
+                    EC.element_to_be_clickable((By.XPATH, CLOSE_BUTTON_XPATH))
+                )
+                close_btn.click()
+                dbg("Dialog closed successfully.")
+                return True
+            except Exception as e:
+                dbg(f"No dialog to close or close failed: {type(e).__name__}: {e}")
+                return False
+
+        mode = "ai_mode" if search_params.ai_mode else "standard"
+        configs = BUTTON_CONFIGS[mode]
+        dbg(f"Mode: {mode}, max_wait_time={max_wait_time}")
 
         # Resolve which config/buttons to use
-        target_buttons, link_class = [], None
+        target_buttons, link_class, active_config = [], None, None
         for config in configs:
+            dbg(f"Trying xpath: {config['xpath']}")
             all_buttons = self.driver.find_elements(By.XPATH, config["xpath"])
+            dbg(f"Total buttons found: {len(all_buttons)}")
             visible = [b for b in all_buttons if b.is_displayed()]
+            dbg(f"Visible buttons: {len(visible)}")
             if visible:
                 target_buttons = visible
                 link_class = config["link_class"]
                 active_config = config
-                print(f"Found {len(visible)} visible buttons via: {config['xpath']}")
+                dbg(f"Using config: key_attr={config['key_attr']}, key_via_parent={config['key_via_parent']}, link_class={link_class}")
                 break
+            else:
+                dbg("No visible buttons for this config, trying next...")
 
         if not target_buttons:
-            print("No visible buttons found. Process complete.")
+            dbg("No visible buttons found across all configs. Returning empty.")
             return content_data
 
-        for button in target_buttons:
+        dbg(f"Processing {len(target_buttons)} buttons...")
+
+        for i, button in enumerate(target_buttons):
+            dbg(f"--- Button {i + 1}/{len(target_buttons)} ---")
             try:
                 # Extract key
                 if active_config["key_via_parent"]:
-                    key = button.find_element(By.XPATH, "./..").get_attribute(active_config["key_attr"])
+                    parent = button.find_element(By.XPATH, "./..")
+                    key = parent.get_attribute(active_config["key_attr"])
+                    dbg(f"Key from parent attribute '{active_config['key_attr']}': {key}")
                 else:
                     key = button.get_attribute(active_config["key_attr"])
+                    dbg(f"Key from button attribute '{active_config['key_attr']}': {key}")
 
-                if not key or key in processed_buttons:
+                if not key:
+                    dbg("No key found, skipping button.")
+                    continue
+                if key in processed_buttons:
+                    dbg(f"Key '{key}' already processed, skipping.")
                     continue
 
-                # Scroll, click
+                # Scroll into view
+                dbg(f"Scrolling to button with key: {key}")
                 self.driver.execute_script(
                     "arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", button
                 )
                 time.sleep(0.2)
 
+                # Click
                 try:
                     WebDriverWait(self.driver, max_wait_time).until(EC.element_to_be_clickable(button))
                     button.click()
+                    dbg("Clicked button normally.")
                 except ElementClickInterceptedException:
+                    dbg("Normal click intercepted, falling back to JS click.")
                     self.driver.execute_script("arguments[0].click();", button)
 
+                dbg("Sleeping 0.5s for dynamic content...")
                 time.sleep(0.5)
 
                 # Scrape visible links
+                dbg(f"Waiting for links with class '{link_class}'...")
                 try:
                     WebDriverWait(self.driver, max_wait_time).until(
                         lambda d: d.find_elements(By.CLASS_NAME, link_class)
                     )
-                    visible_links = [
-                        l for l in self.driver.find_elements(By.CLASS_NAME, link_class)
-                        if l.is_displayed()
-                    ]
+                    all_links = self.driver.find_elements(By.CLASS_NAME, link_class)
+                    dbg(f"Total '{link_class}' links found: {len(all_links)}")
+                    visible_links = [l for l in all_links if l.is_displayed()]
+                    dbg(f"Visible '{link_class}' links: {len(visible_links)}")
+
                     urls = [l.get_attribute("href") for l in visible_links if l.get_attribute("href")]
                     content_data[key] = urls
-                    print(f"Extracted {len(urls)} URLs for key: {key}")
-                except TimeoutException:
-                    print(f"No {link_class} links found for key: {key}")
+                    dbg(f"Extracted {len(urls)} URLs for key '{key}':")
+                    for j, url in enumerate(urls, 1):
+                        dbg(f"  {j}. {url[:80]}{'...' if len(url) > 80 else ''}")
+
+                except Exception as e:
+                    dbg(f"Failed to find '{link_class}' links: {type(e).__name__}: {e}")
                     content_data[key] = []
 
+                # Close dialog before moving to next button
+                dbg("Attempting to close citation dialog...")
+                try_close_dialog()
+                time.sleep(0.2)
+
                 processed_buttons.add(key)
-                time.sleep(random.uniform(0.05, 0.15))
+
+                pause = random.uniform(0.05, 0.15)
+                dbg(f"Pausing {pause:.2f}s before next button...")
+                time.sleep(pause)
 
             except Exception as e:
-                print(f"Error processing button {key}: {e}")
+                dbg(f"Unhandled error on button {i + 1}: {type(e).__name__}: {e}")
+                try_close_dialog()  # Attempt cleanup even on error
+
+        dbg(f"Done. Collected citations for {len(content_data)} keys:")
+        for key, urls in content_data.items():
+            dbg(f"  {key}: {len(urls)} URLs")
+            for j, url in enumerate(urls, 1):
+                dbg(f"    {j}. {url[:80]}{'...' if len(url) > 80 else ''}")
 
         return content_data
 

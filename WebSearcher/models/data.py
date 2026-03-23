@@ -64,3 +64,4 @@ class BaseSERP(BaseModel):
     crawl_id: str = Field(..., description="Identifier for grouping related SERPs")
     version: str = Field(..., description="WebSearcher version used")
     method: str = Field(..., description="Search method used (selenium/requests)")
+

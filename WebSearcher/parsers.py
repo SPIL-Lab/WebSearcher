@@ -8,7 +8,7 @@ from .logger import Logger
 log = Logger().start(__name__)
 
 
-def parse_serp(serp: str | BeautifulSoup) -> dict:
+def parse_serp(serp: str | BeautifulSoup, citations: dict | None = None) -> dict:
     """Parse a Search Engine Result Page (SERP)
 
     Args:
@@ -18,18 +18,24 @@ def parse_serp(serp: str | BeautifulSoup) -> dict:
         A dict with 'results' and 'features' keys.
     """
     # Extract components
-    soup = utils.make_soup(serp)
-    extractor = Extractor(soup)
-    extractor.extract_components()
-    component_list = extractor.components
 
-    # Classify and parse components
-    for cmpt in component_list:
-        cmpt.classify_component()
-        cmpt.parse_component()
-    results = component_list.export_component_results()
+    # soup = utils.make_soup(serp)
+    # extractor = Extractor(soup)
+    # extractor.extract_components()
+    # component_list = extractor.components
+
+    # # Classify and parse components
+    # for cmpt in component_list:
+    #     cmpt.classify_component()
+    #     cmpt.parse_component()
+    # results = component_list.export_component_results()
+
+    # return {
+        # "features": FeatureExtractor.extract_features(soup).model_dump(),
+        # "results": results,
+    # }
 
     return {
-        "features": FeatureExtractor.extract_features(soup).model_dump(),
-        "results": results,
+        "features": {},
+        "results": [{'citations': citations}]
     }
