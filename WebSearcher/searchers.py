@@ -84,6 +84,7 @@ class SearchEngine:
             lang: A language code (e.g., 'en')
             num_results: The number of results to return
             ai_expand: Whether to use selenium to expand AI overviews
+            ai_mode: Collect in Google's AI Mode instead of main search.
             headers: Custom headers to include in the request
         """
 

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import orjson
 import undetected_chromedriver as uc
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
@@ -14,6 +14,34 @@ from .. import utils
 from ..models.configs import SeleniumConfig
 from ..models.data import ResponseOutput
 from ..models.searches import SearchParams
+
+
+TRANSLATIONS = {
+    "en": {
+        "reject_all": "Reject all",
+        "show_all": "Show all",
+        "not_now": "Not now",
+        "view_related": "View related links"
+    },
+    "de": {
+        "reject_all": "Alle ablehnen",
+        "show_all": "Alle anzeigen",
+        "not_now": "Jetzt nicht",
+        "view_related": "Zugehörige Links ansehen"
+    },
+    "es": {
+        "reject_all": "Rechazar todo",
+        "show_all": "Mostrar todo",
+        "not_now": "Ahora no",
+        "view_related": "Ver enlaces relacionados"
+    },
+    "pt": {
+        "reject_all": "Rejeitar tudo",
+        "show_all": "Mostrar tudo",
+        "not_now": "Agora não",
+        "view_related": "Ver links relacionados"
+    }
+}
 
 
 class SeleniumDriver:
@@ -116,8 +144,10 @@ class SeleniumDriver:
 
         XPATHS = {
             "reject_all": "//button[.//div[text()='Alle ablehnen']]",
-            "show_more": "//div[@jsname='rPRdsc' and @role='button']",
-            "show_all": '//div[@role="button" and .//span[text()="Show all"]]',
+            "show_more_aioverivew": "//div[@jsname='rPRdsc' and @role='button']",
+            # "show_all_aimode": '//div[@role="button" and .//span[text()="Show all"]]',
+            "show_all_aimode": '//div[@role="button" and .//span[text()="Mostrar todo"]]',
+            "show_all_aioverview": '//div[@role="button" and .//span[text()="Alle anzeigen"]]',
             "not_now": '//g-raised-button[@role="button" and .//div[normalize-space(.)="Not now"]]',
         }
 
@@ -142,15 +172,15 @@ class SeleniumDriver:
 
         dbg(f"ai_mode={search_params.ai_mode}")
 
+        dbg("Checking for reject_all button...")
+        rejected = try_click(XPATHS["reject_all"])
+        dbg(f"reject_all result: {'clicked' if rejected else 'not found/skipped'}")
+
         if search_params.ai_mode:
             dbg("Branch: AI mode")
 
-            dbg("Checking for reject_all button...")
-            rejected = try_click(XPATHS["reject_all"])
-            dbg(f"reject_all result: {'clicked' if rejected else 'not found/skipped'}")
-
             dbg("Checking for show_all button...")
-            showed = try_click(XPATHS["show_all"])
+            showed = try_click(XPATHS["show_all_aimode"])
             dbg(f"show_all result: {'clicked' if showed else 'not found/skipped'}")
 
             dbg("Grabbing page source...")
@@ -170,11 +200,11 @@ class SeleniumDriver:
             dbg(f"Page source grabbed after not_now: {len(expanded_source)} chars")
 
         dbg("Checking for show_more button...")
-        if try_click(XPATHS["show_more"]):
+        if try_click(XPATHS["show_more_aioverivew"]):
             dbg("show_more clicked, sleeping 2s...")
             time.sleep(2)
             dbg("Checking for show_all after show_more...")
-            try_click(XPATHS["show_all"])
+            try_click(XPATHS["show_all_aioverview"])
             expanded_source = self.driver.page_source
             dbg(f"Page source grabbed after show_more: {len(expanded_source)} chars")
 
@@ -215,7 +245,8 @@ class SeleniumDriver:
                     "link_class": "KEVENd",
                 },
                 {
-                    "xpath": "//button[@class='rBl3me' and @jsname='sIoYce']",
+                    # "xpath": "//button[@class='rBl3me' and @jsname='sIoYce']",
+                    "xpath": "//button[contains(@class, 'rBl3me')]",                    
                     "key_attr": "data-icl-uuid",
                     "key_via_parent": False,
                     "link_class": "NDNGvf",
