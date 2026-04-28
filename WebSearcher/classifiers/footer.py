@@ -60,7 +60,9 @@ class ClassifyFooter:
             "People also search for",
             "Related to this search",
             "Searches related to",
+            "Wird auch oft gesucht"
         }
-        h3 = cmpt.find("h3")
+        # h3 = cmpt.find("h3")
+        h3 = cmpt.find(attrs={"role": "heading"})
         h3_matches = [h3.text.strip().startswith(text) for text in known_labels] if h3 else []
         return "searches_related" if any(h3_matches) else "unknown"

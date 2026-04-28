@@ -23,7 +23,8 @@ def parse_searches_related(cmpt, sub_rank=0) -> list:
     output_list = []
 
     # Classic search query suggestions
-    subs = utils.find_all_divs(cmpt, "a", {"class": "k8XOCe"})
+    # subs = utils.find_all_divs(cmpt, "a", {"class": "k8XOCe"})
+    subs = utils.find_all_divs(cmpt, "a", {"class": "ngTNl"})
     text_list = [sub.text.strip() for sub in subs]
     output_list.extend(filter(None, text_list))
 

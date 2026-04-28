@@ -21,17 +21,21 @@ TRANSLATIONS = {
         "reject_all": "Reject all",
         "show_all": "Show all",
         "not_now": "Not now",
-        "view_related": "View related links"
+        "view_related": "View related links",
+        "search": "Search"
     },
     "de": {
         "reject_all": "Alle ablehnen",
         "show_all": "Alle anzeigen",
+        "show_more": "Mehr anzeigen",
         "not_now": "Jetzt nicht",
-        "view_related": "Zugehörige Links ansehen"
+        "view_related": "Zugehörige Links ansehen",
+        "search": "Suche"
     },
     "es": {
         "reject_all": "Rechazar todo",
         "show_all": "Mostrar todo",
+        "show_more": "Mostrar todo",
         "not_now": "Ahora no",
         "view_related": "Ver enlaces relacionados"
     },
@@ -58,6 +62,7 @@ class SeleniumDriver:
         self.log = logger
         self.driver = None
         self.browser_info = {}
+        self.debug = True
 
     def init_driver(self) -> None:
         """Initialize Chrome driver with selenium-specific config"""
@@ -135,93 +140,88 @@ class SeleniumDriver:
 
         return response_output
 
+    def dbg(self, *args):
+        if self.debug:
+            print("[expanding SERP]", *args)
+
+    def try_click(self, xpath, timeout=1):
+        self.dbg(f"Attempting click: {xpath}")
+        try:
+            el = WebDriverWait(self.driver, timeout).until(
+                EC.element_to_be_clickable((By.XPATH, xpath))
+            )
+            el.click()
+            self.dbg(f"Click succeeded: {xpath}")
+            return el
+        except Exception as e:
+            self.dbg(f"Click failed: {xpath} — {type(e).__name__}: {e}")
+            return None
+
     def expand_ai_overview(self, search_params):
         """Expand AI overview box by clicking it
         Somewhat gratuitous expansion to this function,
         compatible with AI Mode windows. Possibly deprecated."""
-        # show_more_button_xpath = "//div[@jsname='rPRdsc' and @role='button']"
-        # show_all_button_xpath = '//div[contains(@class, "trEk7e") and @role="button"]'
 
+        t = TRANSLATIONS[search_params.lang]
         XPATHS = {
-            "reject_all": "//button[.//div[text()='Alle ablehnen']]",
+            "reject_all": f"//button[.//div[normalize-space(.)='{t['reject_all']}']]",
             "show_more_aioverivew": "//div[@jsname='rPRdsc' and @role='button']",
-            # "show_all_aimode": '//div[@role="button" and .//span[text()="Show all"]]',
-            "show_all_aimode": '//div[@role="button" and .//span[text()="Mostrar todo"]]',
-            "show_all_aioverview": '//div[@role="button" and .//span[text()="Alle anzeigen"]]',
-            "not_now": '//g-raised-button[@role="button" and .//div[normalize-space(.)="Not now"]]',
+            "show_all_aimode": f"//div[@role='button' and .//span[normalize-space(.)='{t['show_all']}']]",
+            "show_more_aioverview": f"//div[@role='button' and .//span[normalize-space(.)='{t['show_more']}']]",
+            "show_all_aioverview": f"//div[@role='button' and .//span[normalize-space(.)='{t['show_all']}']]",
+            "not_now": f"//g-raised-button[@role='button' and .//div[normalize-space(.)='{t['not_now']}']]",
         }
 
         debug = True
 
-        def dbg(*args):
-            if debug:
-                print("[expand_ai_overview]", *args)
+        self.dbg(f"ai_mode={search_params.ai_mode}")
 
-        def try_click(xpath, timeout=1):
-            dbg(f"Attempting click: {xpath}")
-            try:
-                el = WebDriverWait(self.driver, timeout).until(
-                    EC.element_to_be_clickable((By.XPATH, xpath))
-                )
-                el.click()
-                dbg(f"Click succeeded: {xpath}")
-                return True
-            except Exception as e:
-                dbg(f"Click failed: {xpath} — {type(e).__name__}: {e}")
-                return False
-
-        dbg(f"ai_mode={search_params.ai_mode}")
-
-        dbg("Checking for reject_all button...")
-        rejected = try_click(XPATHS["reject_all"])
-        dbg(f"reject_all result: {'clicked' if rejected else 'not found/skipped'}")
+        self.dbg("Checking for reject_all button...")
+        rejected = self.try_click(XPATHS["reject_all"])
+        self.dbg(f"reject_all result: {'clicked' if rejected else 'not found/skipped'}")
 
         if search_params.ai_mode:
-            dbg("Branch: AI mode")
+            self.dbg("Branch: AI mode")
 
-            dbg("Checking for show_all button...")
-            showed = try_click(XPATHS["show_all_aimode"])
-            dbg(f"show_all result: {'clicked' if showed else 'not found/skipped'}")
+            self.dbg("Checking for show_all button...")
+            showed = self.try_click(XPATHS["show_all_aimode"])
+            self.dbg(f"show_all result: {'clicked' if showed else 'not found/skipped'}")
 
-            dbg("Grabbing page source...")
+            self.dbg("Grabbing page source...")
             source = self.driver.page_source
-            dbg(f"Page source length: {len(source)} chars")
+            self.dbg(f"Page source length: {len(source)} chars")
             return source
 
         # Standard (non-AI mode) expansion
-        dbg("Branch: standard mode")
+        self.dbg("Branch: standard mode")
         expanded_source = None
 
-        dbg("Checking for not_now button...")
-        if try_click(XPATHS["not_now"]):
-            dbg("not_now clicked, sleeping 2s...")
+        self.dbg("Checking for not_now button...")
+        if self.try_click(XPATHS["not_now"]):
+            self.dbg("not_now clicked, sleeping 2s...")
             time.sleep(2)
             expanded_source = self.driver.page_source
-            dbg(f"Page source grabbed after not_now: {len(expanded_source)} chars")
+            self.dbg(f"Page source grabbed after not_now: {len(expanded_source)} chars")
 
-        dbg("Checking for show_more button...")
-        if try_click(XPATHS["show_more_aioverivew"]):
-            dbg("show_more clicked, sleeping 2s...")
+        self.dbg("Checking for show_more button...")
+        if self.try_click(XPATHS["show_more_aioverivew"]):
+            self.dbg("show_more clicked, sleeping 2s...")
             time.sleep(2)
-            dbg("Checking for show_all after show_more...")
-            try_click(XPATHS["show_all_aioverview"])
+            self.dbg("Checking for show_all after show_more...")
+            self.try_click(XPATHS["show_all_aioverview"])
             expanded_source = self.driver.page_source
-            dbg(f"Page source grabbed after show_more: {len(expanded_source)} chars")
+            self.dbg(f"Page source grabbed after show_more: {len(expanded_source)} chars")
 
-        dbg(f"Returning source: {'None' if expanded_source is None else f'{len(expanded_source)} chars'}")
+        self.dbg(f"Returning source: {'None' if expanded_source is None else f'{len(expanded_source)} chars'}")
         return expanded_source
 
     def collect_citations(self, search_params, max_wait_time=2):
         """Collect citation URLs by clicking each source button and scraping visible links."""
-        debug = True
-
-        def dbg(*args):
-            if debug:
-                print("[collect_citations]", *args)
 
         content_data = {}
         processed_buttons = set()
 
+        t = TRANSLATIONS[search_params.lang]
         BUTTON_CONFIGS = {
             "ai_mode": [
                 {
@@ -262,60 +262,60 @@ class SeleniumDriver:
                     EC.element_to_be_clickable((By.XPATH, CLOSE_BUTTON_XPATH))
                 )
                 close_btn.click()
-                dbg("Dialog closed successfully.")
+                self.dbg("Dialog closed successfully.")
                 return True
             except Exception as e:
-                dbg(f"No dialog to close or close failed: {type(e).__name__}: {e}")
+                self.dbg(f"No dialog to close or close failed: {type(e).__name__}: {e}")
                 return False
 
         mode = "ai_mode" if search_params.ai_mode else "standard"
         configs = BUTTON_CONFIGS[mode]
-        dbg(f"Mode: {mode}, max_wait_time={max_wait_time}")
+        self.dbg(f"Mode: {mode}, max_wait_time={max_wait_time}")
 
         # Resolve which config/buttons to use
         target_buttons, link_class, active_config = [], None, None
         for config in configs:
-            dbg(f"Trying xpath: {config['xpath']}")
+            self.dbg(f"Trying xpath: {config['xpath']}")
             all_buttons = self.driver.find_elements(By.XPATH, config["xpath"])
-            dbg(f"Total buttons found: {len(all_buttons)}")
+            self.dbg(f"Total buttons found: {len(all_buttons)}")
             visible = [b for b in all_buttons if b.is_displayed()]
-            dbg(f"Visible buttons: {len(visible)}")
+            self.dbg(f"Visible buttons: {len(visible)}")
             if visible:
                 target_buttons = visible
                 link_class = config["link_class"]
                 active_config = config
-                dbg(f"Using config: key_attr={config['key_attr']}, key_via_parent={config['key_via_parent']}, link_class={link_class}")
+                self.dbg(f"Using config: key_attr={config['key_attr']}, key_via_parent={config['key_via_parent']}, link_class={link_class}")
                 break
             else:
-                dbg("No visible buttons for this config, trying next...")
+                self.dbg("No visible buttons for this config, trying next...")
 
         if not target_buttons:
-            dbg("No visible buttons found across all configs. Returning empty.")
+            self.dbg("No visible buttons found across all configs. Returning empty.")
             return content_data
 
-        dbg(f"Processing {len(target_buttons)} buttons...")
+        self.dbg(f"Processing {len(target_buttons)} buttons...")
 
         for i, button in enumerate(target_buttons):
-            dbg(f"--- Button {i + 1}/{len(target_buttons)} ---")
+            self.dbg(f"--- Button {i + 1}/{len(target_buttons)} ---")
             try:
                 # Extract key
                 if active_config["key_via_parent"]:
                     parent = button.find_element(By.XPATH, "./..")
                     key = parent.get_attribute(active_config["key_attr"])
-                    dbg(f"Key from parent attribute '{active_config['key_attr']}': {key}")
+                    self.dbg(f"Key from parent attribute '{active_config['key_attr']}': {key}")
                 else:
                     key = button.get_attribute(active_config["key_attr"])
-                    dbg(f"Key from button attribute '{active_config['key_attr']}': {key}")
+                    self.dbg(f"Key from button attribute '{active_config['key_attr']}': {key}")
 
                 if not key:
-                    dbg("No key found, skipping button.")
+                    self.dbg("No key found, skipping button.")
                     continue
                 if key in processed_buttons:
-                    dbg(f"Key '{key}' already processed, skipping.")
+                    self.dbg(f"Key '{key}' already processed, skipping.")
                     continue
 
                 # Scroll into view
-                dbg(f"Scrolling to button with key: {key}")
+                self.dbg(f"Scrolling to button with key: {key}")
                 self.driver.execute_script(
                     "arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", button
                 )
@@ -325,57 +325,135 @@ class SeleniumDriver:
                 try:
                     WebDriverWait(self.driver, max_wait_time).until(EC.element_to_be_clickable(button))
                     button.click()
-                    dbg("Clicked button normally.")
+                    self.dbg("Clicked button normally.")
                 except ElementClickInterceptedException:
-                    dbg("Normal click intercepted, falling back to JS click.")
+                    self.dbg("Normal click intercepted, falling back to JS click.")
                     self.driver.execute_script("arguments[0].click();", button)
 
-                dbg("Sleeping 0.5s for dynamic content...")
+                self.dbg("Sleeping 0.5s for dynamic content...")
                 time.sleep(0.5)
 
                 # Scrape visible links
-                dbg(f"Waiting for links with class '{link_class}'...")
+                self.dbg(f"Waiting for links with class '{link_class}'...")
                 try:
                     WebDriverWait(self.driver, max_wait_time).until(
                         lambda d: d.find_elements(By.CLASS_NAME, link_class)
                     )
                     all_links = self.driver.find_elements(By.CLASS_NAME, link_class)
-                    dbg(f"Total '{link_class}' links found: {len(all_links)}")
+                    self.dbg(f"Total '{link_class}' links found: {len(all_links)}")
                     visible_links = [l for l in all_links if l.is_displayed()]
-                    dbg(f"Visible '{link_class}' links: {len(visible_links)}")
+                    self.dbg(f"Visible '{link_class}' links: {len(visible_links)}")
 
                     urls = [l.get_attribute("href") for l in visible_links if l.get_attribute("href")]
                     content_data[key] = urls
-                    dbg(f"Extracted {len(urls)} URLs for key '{key}':")
+                    self.dbg(f"Extracted {len(urls)} URLs for key '{key}':")
                     for j, url in enumerate(urls, 1):
-                        dbg(f"  {j}. {url[:80]}{'...' if len(url) > 80 else ''}")
+                        self.dbg(f"  {j}. {url[:80]}{'...' if len(url) > 80 else ''}")
 
                 except Exception as e:
-                    dbg(f"Failed to find '{link_class}' links: {type(e).__name__}: {e}")
+                    self.dbg(f"Failed to find '{link_class}' links: {type(e).__name__}: {e}")
                     content_data[key] = []
 
                 # Close dialog before moving to next button
-                dbg("Attempting to close citation dialog...")
+                self.dbg("Attempting to close citation dialog...")
                 try_close_dialog()
                 time.sleep(0.2)
 
                 processed_buttons.add(key)
 
                 pause = random.uniform(0.05, 0.15)
-                dbg(f"Pausing {pause:.2f}s before next button...")
+                self.dbg(f"Pausing {pause:.2f}s before next button...")
                 time.sleep(pause)
 
             except Exception as e:
-                dbg(f"Unhandled error on button {i + 1}: {type(e).__name__}: {e}")
+                self.dbg(f"Unhandled error on button {i + 1}: {type(e).__name__}: {e}")
                 try_close_dialog()  # Attempt cleanup even on error
 
-        dbg(f"Done. Collected citations for {len(content_data)} keys:")
+        self.dbg(f"Done. Collected citations for {len(content_data)} keys:")
         for key, urls in content_data.items():
-            dbg(f"  {key}: {len(urls)} URLs")
+            self.dbg(f"  {key}: {len(urls)} URLs")
             for j, url in enumerate(urls, 1):
-                dbg(f"    {j}. {url[:80]}{'...' if len(url) > 80 else ''}")
+                self.dbg(f"    {j}. {url[:80]}{'...' if len(url) > 80 else ''}")
 
         return content_data
+
+    def collect_autosuggest(self, search_params):
+
+        mode = "ai_mode" if search_params.ai_mode else "standard"
+        if mode == 'ai_mode':
+            return []
+
+        auto = []
+        auto_space = []
+
+        t = TRANSLATIONS[search_params.lang]
+        search_box_xpath = f"//textarea[@aria-label='{t['search']}']"
+        search_box = self.driver.find_element(By.search_box_xpath, "./..")
+        self.driver.execute_script(
+            "arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", search_box
+            )
+        search_box = self.try_click(search_box_xpath)
+        search_box.send_keys(Keys.END)  # Move cursor to end of existing text
+
+        def classify_li(li):
+            classes = set(li.get_attribute("class").split())
+            text = li.text.strip()
+            if not text:
+                return None
+
+            base = {
+                "text": text,
+                "order": None,  # filled in by caller
+            }
+
+            if {"li", "sbct", "PZPZlf", "sbre"} <= classes and "yMAEcf" not in classes:
+                return {**base, "type": "suggestion_entity"}
+            elif {"li", "sbct", "PZPZlf", "yMAEcf"} <= classes:
+                return {**base, "type": "question"}
+            elif {"li", "sbct", "PZPZlf"} <= classes:
+                return {**base, "type": "suggestion"}
+            elif {"IDVnvc", "PZPZlf", "sbre"} <= classes:
+                return {**base, "type": "entity"}
+            elif "PZPZlf" in classes:
+                return {**base, "type": "other"}
+
+            return None
+
+        def collect_matching_divs():
+            results = []
+            try:
+                container = self.driver.find_element(By.CLASS_NAME, "mkHrUc")
+                lis = container.find_elements(By.XPATH, ".//li[contains(@class, 'PZPZlf')]")
+                for order, li in enumerate(lis):
+                    entry = classify_li(li)
+                    if entry:
+                        entry["order"] = order
+                        results.append(entry)
+            except Exception as e:
+                print(f"[collect_matching_divs] Error: {e}")
+            return results
+
+        # First pass
+        first_pass = collect_matching_divs()
+        auto.extend(first_pass)
+
+        # Enter space and wait for suggestions to refresh
+        search_box.send_keys(" ")
+        try:
+            wait = WebDriverWait(self.driver, 3)
+            if first_pass:
+                stale_li = self.driver.find_elements(By.XPATH, ".//li[contains(@class, 'PZPZlf')]")
+                if stale_li:
+                    wait.until(EC.staleness_of(stale_li[0]))
+            wait.until(EC.presence_of_element_located((By.CLASS_NAME, "mkHrUc")))
+        except Exception:
+            pass  # Suggestions may not change — continue anyway
+
+        # Second pass
+        second_pass = collect_matching_divs()
+        auto_space.extend(second_pass)
+
+        return auto, auto_space
 
     def cleanup(self) -> bool:
         """Clean up resources, particularly Selenium's browser instance
