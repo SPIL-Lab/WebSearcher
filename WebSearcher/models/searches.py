@@ -54,4 +54,6 @@ class SearchParams(BaseConfig):
             "lang": self.lang,
             "url": self.url,
             "serp_id": self.serp_id,
+            "ai_mode": self.ai_mode,
+            "ai_expand": self.ai_expand
         }

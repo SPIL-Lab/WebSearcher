@@ -20,6 +20,7 @@ TRANSLATIONS = {
     "en": {
         "reject_all": "Reject all",
         "show_all": "Show all",
+        "show_more": "Show more",
         "not_now": "Not now",
         "view_related": "View related links",
         "search": "Search"
@@ -122,6 +123,7 @@ class SeleniumDriver:
             response_output.html = self.driver.page_source
             response_output.url = self.driver.current_url
             response_output.response_code = 200
+            response_output.interactive_data = {}
 
             # Expand AI overview if requested
             if search_params.ai_expand:
@@ -131,7 +133,9 @@ class SeleniumDriver:
                     self.log.debug(f"SERP | expanded html | len diff: {len_diff}")
                     response_output.html = expanded_html
                     citation_data = self.collect_citations(search_params)
-                response_output.citations = citation_data
+                response_output.interactive_data['citations'] = citation_data
+
+            response_output.interactive_data['auto'], response_output.interactive_data['auto_space'] = self.collect_autosuggest(search_params)
 
         except Exception as e:
             self.log.exception(f"SERP | Chromedriver error | {str(e)}")
@@ -388,12 +392,19 @@ class SeleniumDriver:
 
         t = TRANSLATIONS[search_params.lang]
         search_box_xpath = f"//textarea[@aria-label='{t['search']}']"
-        search_box = self.driver.find_element(By.search_box_xpath, "./..")
-        self.driver.execute_script(
-            "arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", search_box
-            )
+        search_box = self.driver.find_element(By.XPATH, search_box_xpath)
+        # self.driver.execute_script(
+        #     "arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", search_box
+        #     )
+        self.driver.execute_script("window.scrollTo({top: 0, behavior: 'smooth'});")
+        time.sleep(1)
         search_box = self.try_click(search_box_xpath)
         search_box.send_keys(Keys.END)  # Move cursor to end of existing text
+
+
+        pause = random.uniform(.5, 1.5)
+        self.dbg(f"Pausing {pause:.2f}s before first search box...")
+        time.sleep(pause)
 
         def classify_li(li):
             classes = set(li.get_attribute("class").split())
@@ -416,6 +427,8 @@ class SeleniumDriver:
                 return {**base, "type": "entity"}
             elif "PZPZlf" in classes:
                 return {**base, "type": "other"}
+            elif 'sbct' in classes:
+                return {**base, "type": "suggestion_ending"}
 
             return None
 
@@ -423,12 +436,13 @@ class SeleniumDriver:
             results = []
             try:
                 container = self.driver.find_element(By.CLASS_NAME, "mkHrUc")
-                lis = container.find_elements(By.XPATH, ".//li[contains(@class, 'PZPZlf')]")
+                lis = container.find_elements(By.XPATH, ".//li[contains(@class, 'PZPZlf') or contains(@class, 'sbct')]")
                 for order, li in enumerate(lis):
                     entry = classify_li(li)
                     if entry:
                         entry["order"] = order
                         results.append(entry)
+                        self.dbg(f"Entry found: {entry}")
             except Exception as e:
                 print(f"[collect_matching_divs] Error: {e}")
             return results
@@ -439,6 +453,11 @@ class SeleniumDriver:
 
         # Enter space and wait for suggestions to refresh
         search_box.send_keys(" ")
+
+        pause = random.uniform(.5, 1.5)
+        self.dbg(f"Pausing {pause:.2f}s before second search box...")
+        time.sleep(pause)
+
         try:
             wait = WebDriverWait(self.driver, 3)
             if first_pass:
@@ -452,6 +471,8 @@ class SeleniumDriver:
         # Second pass
         second_pass = collect_matching_divs()
         auto_space.extend(second_pass)
+
+        self.dbg(f"First pass, {len(auto)} auto results, Second pass {len(auto_space)} auto results")
 
         return auto, auto_space
 

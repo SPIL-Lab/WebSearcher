@@ -9,7 +9,7 @@ class ResponseOutput(BaseModel):
     user_agent: str = ""
     response_code: int = 0
     timestamp: str = ""
-    citations: dict = {}
+    interactive_data: dict = {}
 
 
 class ParsedSERP(BaseModel):
@@ -64,4 +64,6 @@ class BaseSERP(BaseModel):
     crawl_id: str = Field(..., description="Identifier for grouping related SERPs")
     version: str = Field(..., description="WebSearcher version used")
     method: str = Field(..., description="Search method used (selenium/requests)")
+    ai_mode: bool = Field(..., description="Is an AI mode search")
+    ai_expand: bool = Field(..., description="Expands AI results manually")
 

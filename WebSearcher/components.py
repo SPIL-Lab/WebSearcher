@@ -94,15 +94,12 @@ class Component:
 
     def parse_component(self, parser_type_func: Callable | None = None):
 
-        print(self.type, self.section)
         if not self.type:
             parsed_list = self.create_parsed_list_error("null component type")
         else:
             # Select and run parser
             parser_func = self.select_parser(parser_type_func)
-            print(parser_func)
             parsed_list = self.run_parser(parser_func)
-            print(parsed_list)
 
             # Check parsed_list
             if not isinstance(parsed_list, (list, dict)):

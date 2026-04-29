@@ -8,7 +8,7 @@ from .logger import Logger
 log = Logger().start(__name__)
 
 
-def parse_serp(serp: str | BeautifulSoup, citations: dict | None = None) -> dict:
+def parse_serp(serp: str | BeautifulSoup, interactive_data: dict | None = None) -> dict:
     """Parse a Search Engine Result Page (SERP)
 
     Args:
@@ -32,10 +32,5 @@ def parse_serp(serp: str | BeautifulSoup, citations: dict | None = None) -> dict
 
     return {
         "features": FeatureExtractor.extract_features(soup).model_dump(),
-        "results": results + [{'citations': citations}],
+        "results": results + [{k: v} for k, v in interactive_data.items()],
     }
-
-    # return {
-    #     "features": {},
-    #     "results": [{'citations': citations}]
-    # }
