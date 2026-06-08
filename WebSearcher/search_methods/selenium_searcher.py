@@ -9,6 +9,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.action_chains import ActionChains
 
 from .. import utils
 from ..models.configs import SeleniumConfig
@@ -38,14 +39,39 @@ TRANSLATIONS = {
         "show_all": "Mostrar todo",
         "show_more": "Mostrar todo",
         "not_now": "Ahora no",
-        "view_related": "Ver enlaces relacionados"
+        "view_related": "Ver enlaces relacionados",
+        "search": "Buscar"
     },
-    "pt": {
+    "pt-br": {
         "reject_all": "Rejeitar tudo",
         "show_all": "Mostrar tudo",
+        "show_more": "Mostrar mais",
         "not_now": "Agora não",
-        "view_related": "Ver links relacionados"
-    }
+        "view_related": "Ver links relacionados",
+        "search": "Pesquisar"
+    },
+    "hy": {
+        "show_all": "Ցույց տալ ավելի շատ ԱԲ ակնարկներ",
+        "show_more": "Ցույց տալ բոլոր առնչվող հղումները",
+        "search": "Գտնել",
+        "not_now": "NA",
+        "reject_all": "NA",
+    },
+    "ru": {
+        "show_all": "Показать все",
+        "show_more": "Развернуть",
+        "search": "Найти",
+        "reject_all": '',
+        "not_now": ''
+    },
+    "fr": {
+        "reject_all": "Tout refuser",
+        "show_all": "Alle anzeigen",
+        "show_more": "Mehr anzeigen",
+        "not_now": "Jetzt nicht",
+        "view_related": "Zugehörige Links ansehen",
+        "search": "Suche"
+    },
 }
 
 
@@ -135,7 +161,10 @@ class SeleniumDriver:
                     citation_data = self.collect_citations(search_params)
                 response_output.interactive_data['citations'] = citation_data
 
-            response_output.interactive_data['auto'], response_output.interactive_data['auto_space'] = self.collect_autosuggest(search_params)
+            if not search_params.ai_mode:
+                response_output.interactive_data['auto'], response_output.interactive_data['auto_space'] = self.collect_autosuggest(search_params)
+            else:
+                response_output.interactive_data['auto'], response_output.interactive_data['auto_space'] = None, None
 
         except Exception as e:
             self.log.exception(f"SERP | Chromedriver error | {str(e)}")
@@ -158,7 +187,8 @@ class SeleniumDriver:
             self.dbg(f"Click succeeded: {xpath}")
             return el
         except Exception as e:
-            self.dbg(f"Click failed: {xpath} — {type(e).__name__}: {e}")
+            # self.dbg(f"Click failed: {xpath} — {type(e).__name__}: {e}")
+            self.dbg(f"Click failed: {xpath} — {type(e).__name__}")
             return None
 
     def expand_ai_overview(self, search_params):
@@ -169,14 +199,15 @@ class SeleniumDriver:
         t = TRANSLATIONS[search_params.lang]
         XPATHS = {
             "reject_all": f"//button[.//div[normalize-space(.)='{t['reject_all']}']]",
-            "show_more_aioverivew": "//div[@jsname='rPRdsc' and @role='button']",
+            "show_more_aioverview": "//div[@jsname='rPRdsc' and @role='button']",
             "show_all_aimode": f"//div[@role='button' and .//span[normalize-space(.)='{t['show_all']}']]",
-            "show_more_aioverview": f"//div[@role='button' and .//span[normalize-space(.)='{t['show_more']}']]",
+            # "show_more_aioverview": f"//div[@role='button' and .//span[normalize-space(.)='{t['show_more']}']]",
             "show_all_aioverview": f"//div[@role='button' and .//span[normalize-space(.)='{t['show_all']}']]",
             "not_now": f"//g-raised-button[@role='button' and .//div[normalize-space(.)='{t['not_now']}']]",
         }
 
         debug = True
+        source = self.driver.page_source
 
         self.dbg(f"ai_mode={search_params.ai_mode}")
 
@@ -190,6 +221,8 @@ class SeleniumDriver:
             self.dbg("Checking for show_all button...")
             showed = self.try_click(XPATHS["show_all_aimode"])
             self.dbg(f"show_all result: {'clicked' if showed else 'not found/skipped'}")
+
+            # self.response_output.interactive_data['ai_mode_success'] = showed is not None           
 
             self.dbg("Grabbing page source...")
             source = self.driver.page_source
@@ -208,13 +241,18 @@ class SeleniumDriver:
             self.dbg(f"Page source grabbed after not_now: {len(expanded_source)} chars")
 
         self.dbg("Checking for show_more button...")
-        if self.try_click(XPATHS["show_more_aioverivew"]):
+        if self.try_click(XPATHS["show_more_aioverview"]):
             self.dbg("show_more clicked, sleeping 2s...")
             time.sleep(2)
             self.dbg("Checking for show_all after show_more...")
             self.try_click(XPATHS["show_all_aioverview"])
             expanded_source = self.driver.page_source
             self.dbg(f"Page source grabbed after show_more: {len(expanded_source)} chars")
+
+        # self.response_output.interactive_data['ai_overview_success'] = expanded_source is not None           
+        if expanded_source is None:
+            self.dbg(f"No AI Overview detected. Returning source: {'None' if source is None else f'{len(source)} chars'}")
+            return source
 
         self.dbg(f"Returning source: {'None' if expanded_source is None else f'{len(expanded_source)} chars'}")
         return expanded_source
@@ -229,31 +267,49 @@ class SeleniumDriver:
         BUTTON_CONFIGS = {
             "ai_mode": [
                 {
+                    "xpath": "//button[contains(@class, 'vDOt8c')]",                   
+                    "key_attr": "data-icl-uuid",
+                    "key_via_parent": False,
+                    "link_class": '//li[@class="Gzwrb"]//a',
+                    "hover": True
+                },
+                {
                     "xpath": '//button[@aria-label="View related links"]',
                     "key_attr": "data-icl-uuid",
                     "key_via_parent": False,
                     "link_class": "NDNGvf",
+                    "hover": False
                 },
                 {
                     "xpath": "//button[contains(@class, 'rBl3me') and @data-amic='true' and @data-icl-uuid]",
                     "key_attr": "data-icl-uuid",
                     "key_via_parent": False,
                     "link_class": "NDNGvf",
+                    "hover": False
                 },
             ],
             "standard": [
+                {
+                    "xpath": "//button[contains(@class, 'vDOt8c oy7Apc qu4n2c')]",                    
+                    "key_attr": "data-icl-uuid",
+                    "key_via_parent": False,
+                    "link_class": "NDNGvf",
+                    "hover": True
+                },
                 {
                     "xpath": "//div[@role='button' and @jsname='HtgYJd'] | //span[@role='button' and @jsname='HtgYJd']",
                     "key_attr": "data-cid",
                     "key_via_parent": True,
                     "link_class": "KEVENd",
+                    "hover": False
                 },
                 {
                     # "xpath": "//button[@class='rBl3me' and @jsname='sIoYce']",
-                    "xpath": "//button[contains(@class, 'rBl3me')]",                    
+                    "xpath": "//button[contains(@class, 'rBl3me')] | //button[contains(@class, 'vDOt8c oy7Apc qu4n2c')]",                    
                     "key_attr": "data-icl-uuid",
                     "key_via_parent": False,
                     "link_class": "NDNGvf",
+                    "hover": False
                 },
             ],
         }
@@ -269,7 +325,8 @@ class SeleniumDriver:
                 self.dbg("Dialog closed successfully.")
                 return True
             except Exception as e:
-                self.dbg(f"No dialog to close or close failed: {type(e).__name__}: {e}")
+                # self.dbg(f"No dialog to close or close failed: {type(e).__name__}: {e}")
+                self.dbg(f"No dialog to close or close failed: {type(e).__name__}")
                 return False
 
         mode = "ai_mode" if search_params.ai_mode else "standard"
@@ -325,14 +382,18 @@ class SeleniumDriver:
                 )
                 time.sleep(0.2)
 
-                # Click
-                try:
-                    WebDriverWait(self.driver, max_wait_time).until(EC.element_to_be_clickable(button))
-                    button.click()
-                    self.dbg("Clicked button normally.")
-                except ElementClickInterceptedException:
-                    self.dbg("Normal click intercepted, falling back to JS click.")
-                    self.driver.execute_script("arguments[0].click();", button)
+                # Click or hover
+                if active_config['hover']:
+                    ActionChains(self.driver).move_to_element(button).perform()
+                    self.dbg("Hovered over button.")
+                else:
+                    try:
+                        WebDriverWait(self.driver, max_wait_time).until(EC.element_to_be_clickable(button))
+                        button.click()
+                        self.dbg("Clicked button normally.")
+                    except ElementClickInterceptedException:
+                        self.dbg("Normal click intercepted, falling back to JS click.")
+                        self.driver.execute_script("arguments[0].click();", button)
 
                 self.dbg("Sleeping 0.5s for dynamic content...")
                 time.sleep(0.5)
@@ -341,9 +402,9 @@ class SeleniumDriver:
                 self.dbg(f"Waiting for links with class '{link_class}'...")
                 try:
                     WebDriverWait(self.driver, max_wait_time).until(
-                        lambda d: d.find_elements(By.CLASS_NAME, link_class)
+                        lambda d: d.find_elements(By.XPATH, link_class)
                     )
-                    all_links = self.driver.find_elements(By.CLASS_NAME, link_class)
+                    all_links = self.driver.find_elements(By.XPATH, link_class)
                     self.dbg(f"Total '{link_class}' links found: {len(all_links)}")
                     visible_links = [l for l in all_links if l.is_displayed()]
                     self.dbg(f"Visible '{link_class}' links: {len(visible_links)}")
@@ -359,8 +420,13 @@ class SeleniumDriver:
                     content_data[key] = []
 
                 # Close dialog before moving to next button
-                self.dbg("Attempting to close citation dialog...")
-                try_close_dialog()
+                if not active_config['hover']:
+                    self.dbg("Attempting to close citation dialog...")
+                    try_close_dialog()
+                else:
+                    textarea = self.driver.find_element(By.CSS_SELECTOR, 'textarea.ITIRGe')
+                    ActionChains(self.driver).move_to_element(textarea).perform()
+                    self.dbg("Moved to textarea to dismiss hover.")
                 time.sleep(0.2)
 
                 processed_buttons.add(key)
@@ -435,7 +501,8 @@ class SeleniumDriver:
         def collect_matching_divs():
             results = []
             try:
-                container = self.driver.find_element(By.CLASS_NAME, "mkHrUc")
+                # container = self.driver.find_element(By.CLASS_NAME, "mkHrUc")
+                container = self.driver.find_element(By.CLASS_NAME, "aajZCb")
                 lis = container.find_elements(By.XPATH, ".//li[contains(@class, 'PZPZlf') or contains(@class, 'sbct')]")
                 for order, li in enumerate(lis):
                     entry = classify_li(li)
