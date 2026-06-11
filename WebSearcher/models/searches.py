@@ -25,7 +25,6 @@ class SearchParams(BaseConfig):
         """Generates a dictionary of URL parameters based on the search parameters"""
         params = {"q": utils.encode_param_value(self.qry)}
         
-        # Add AI Mode parameter if enabled
         if self.ai_mode:
             params["udm"] = "50"
 

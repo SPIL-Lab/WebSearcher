@@ -133,18 +133,18 @@ class SeleniumDriver:
         try:
             self.driver.get(search_params.url)
             time.sleep(2)
+
+            # Do basic page elements load
             if search_params.ai_mode:
-                # Double check if still necessary
-                # WebDriverWait(self.driver, 10).until(
-                #     EC.visibility_of_element_located(
-                #         (By.CSS_SELECTOR, 'button[aria-label="Positive feedback"]')
-                #     )
-                # )
-                pass
+                WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "textarea.ITIRGe"))
+                )
             else:
                 WebDriverWait(self.driver, 10).until(
                     EC.presence_of_element_located((By.ID, "search"))
                 )
+            
+
             time.sleep(2)
             response_output.html = self.driver.page_source
             response_output.url = self.driver.current_url
@@ -201,7 +201,6 @@ class SeleniumDriver:
             "reject_all": f"//button[.//div[normalize-space(.)='{t['reject_all']}']]",
             "show_more_aioverview": "//div[@jsname='rPRdsc' and @role='button']",
             "show_all_aimode": f"//div[@role='button' and .//span[normalize-space(.)='{t['show_all']}']]",
-            # "show_more_aioverview": f"//div[@role='button' and .//span[normalize-space(.)='{t['show_more']}']]",
             "show_all_aioverview": f"//div[@role='button' and .//span[normalize-space(.)='{t['show_all']}']]",
             "not_now": f"//g-raised-button[@role='button' and .//div[normalize-space(.)='{t['not_now']}']]",
         }
@@ -221,8 +220,6 @@ class SeleniumDriver:
             self.dbg("Checking for show_all button...")
             showed = self.try_click(XPATHS["show_all_aimode"])
             self.dbg(f"show_all result: {'clicked' if showed else 'not found/skipped'}")
-
-            # self.response_output.interactive_data['ai_mode_success'] = showed is not None           
 
             self.dbg("Grabbing page source...")
             source = self.driver.page_source
@@ -277,23 +274,23 @@ class SeleniumDriver:
                     "xpath": '//button[@aria-label="View related links"]',
                     "key_attr": "data-icl-uuid",
                     "key_via_parent": False,
-                    "link_class": "NDNGvf",
+                    "link_class": "//a[contains(@class, 'NDNGvf')]",
                     "hover": False
                 },
                 {
                     "xpath": "//button[contains(@class, 'rBl3me') and @data-amic='true' and @data-icl-uuid]",
                     "key_attr": "data-icl-uuid",
                     "key_via_parent": False,
-                    "link_class": "NDNGvf",
+                    "link_class": "//a[contains(@class, 'NDNGvf')]",
                     "hover": False
                 },
             ],
             "standard": [
                 {
-                    "xpath": "//button[contains(@class, 'vDOt8c oy7Apc qu4n2c')]",                    
+                    "xpath": "//button[contains(@class, 'vDOt8c')]",                   
                     "key_attr": "data-icl-uuid",
                     "key_via_parent": False,
-                    "link_class": "NDNGvf",
+                    "link_class": '//li[@class="Gzwrb"]//a',
                     "hover": True
                 },
                 {
@@ -308,7 +305,7 @@ class SeleniumDriver:
                     "xpath": "//button[contains(@class, 'rBl3me')] | //button[contains(@class, 'vDOt8c oy7Apc qu4n2c')]",                    
                     "key_attr": "data-icl-uuid",
                     "key_via_parent": False,
-                    "link_class": "NDNGvf",
+                    "link_class": "//a[contains(@class, 'NDNGvf')]",
                     "hover": False
                 },
             ],
