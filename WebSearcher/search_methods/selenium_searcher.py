@@ -51,17 +51,17 @@ TRANSLATIONS = {
         "search": "Pesquisar"
     },
     "hy": {
-        "show_all": "Ցույց տալ ավելի շատ ԱԲ ակնարկներ",
+        "show_all": "Ցույց տալ բոլորը",
         "show_more": "Ցույց տալ բոլոր առնչվող հղումները",
         "search": "Գտնել",
         "not_now": "NA",
-        "reject_all": "NA",
+        "reject_all": "Մերժել բոլորը",
     },
     "ru": {
         "show_all": "Показать все",
         "show_more": "Развернуть",
         "search": "Найти",
-        "reject_all": '',
+        "reject_all": 'Отклонить все',
         "not_now": ''
     },
     "fr": {
