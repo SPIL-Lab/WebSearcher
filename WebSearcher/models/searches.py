@@ -19,7 +19,8 @@ class SearchParams(BaseConfig):
     ai_expand: bool = Field(False, description="Expand AI overviews if present")
     ai_mode: bool = Field(False, description="(Experimental) Generate AI Mode query")
     headers: dict[str, str] = Field(default_factory=dict, description="Custom headers")
-
+    # ip_address: str = Field("", description="ip address of search")
+    
     @computed_field
     def url_params(self) -> dict[str, Any]:
         """Generates a dictionary of URL parameters based on the search parameters"""
