@@ -259,7 +259,9 @@ class SeleniumDriver:
 
         content_data = {}
         processed_buttons = set()
-
+        processed_keys = set()
+        skip_reasons = {}
+        
         t = TRANSLATIONS[search_params.lang]
         BUTTON_CONFIGS = {
             "ai_mode": [
@@ -319,128 +321,125 @@ class SeleniumDriver:
                     EC.element_to_be_clickable((By.XPATH, CLOSE_BUTTON_XPATH))
                 )
                 close_btn.click()
-                self.dbg("Dialog closed successfully.")
                 return True
-            except Exception as e:
-                # self.dbg(f"No dialog to close or close failed: {type(e).__name__}: {e}")
-                self.dbg(f"No dialog to close or close failed: {type(e).__name__}")
+            except Exception:
                 return False
+
+        def dismiss_hover():
+            try:
+                self.driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+            except Exception:
+                pass
+
+        def get_button_by_key(xpath, key_attr, key_via_parent, key):
+            for b in self.driver.find_elements(By.XPATH, xpath):
+                try:
+                    k = b.find_element(By.XPATH, "./..").get_attribute(key_attr) if key_via_parent \
+                        else b.get_attribute(key_attr)
+                    if k == key:
+                        return b
+                except Exception:
+                    continue
+            return None
 
         mode = "ai_mode" if search_params.ai_mode else "standard"
         configs = BUTTON_CONFIGS[mode]
-        self.dbg(f"Mode: {mode}, max_wait_time={max_wait_time}")
 
-        # Resolve which config/buttons to use
         target_buttons, link_class, active_config = [], None, None
         for config in configs:
-            self.dbg(f"Trying xpath: {config['xpath']}")
             all_buttons = self.driver.find_elements(By.XPATH, config["xpath"])
-            self.dbg(f"Total buttons found: {len(all_buttons)}")
             visible = [b for b in all_buttons if b.is_displayed()]
-            self.dbg(f"Visible buttons: {len(visible)}")
             if visible:
-                target_buttons = visible
-                link_class = config["link_class"]
-                active_config = config
-                self.dbg(f"Using config: key_attr={config['key_attr']}, key_via_parent={config['key_via_parent']}, link_class={link_class}")
+                target_buttons, link_class, active_config = visible, config["link_class"], config
                 break
-            else:
-                self.dbg("No visible buttons for this config, trying next...")
 
         if not target_buttons:
-            self.dbg("No visible buttons found across all configs. Returning empty.")
+            self.dbg("No visible buttons found across all configs.")
             return content_data
 
-        self.dbg(f"Processing {len(target_buttons)} buttons...")
-
-        for i, button in enumerate(target_buttons):
-            self.dbg(f"--- Button {i + 1}/{len(target_buttons)} ---")
+        keyed = []
+        for b in target_buttons:
             try:
-                # Extract key
-                if active_config["key_via_parent"]:
-                    parent = button.find_element(By.XPATH, "./..")
-                    key = parent.get_attribute(active_config["key_attr"])
-                    self.dbg(f"Key from parent attribute '{active_config['key_attr']}': {key}")
-                else:
-                    key = button.get_attribute(active_config["key_attr"])
-                    self.dbg(f"Key from button attribute '{active_config['key_attr']}': {key}")
+                key = (b.find_element(By.XPATH, "./..").get_attribute(active_config["key_attr"])
+                       if active_config["key_via_parent"] else b.get_attribute(active_config["key_attr"]))
+                if key:
+                    keyed.append(key)
+            except Exception:
+                continue
+        keyed = list(dict.fromkeys(keyed))
 
-                if not key:
-                    self.dbg("No key found, skipping button.")
-                    continue
-                if key in processed_buttons:
-                    self.dbg(f"Key '{key}' already processed, skipping.")
-                    continue
+        self.dbg(f"Processing {len(keyed)} buttons (mode={mode})...")
 
-                # Scroll into view
-                self.dbg(f"Scrolling to button with key: {key}")
+        for i, key in enumerate(keyed):
+            self.dbg(f"--- Button {i + 1}/{len(keyed)} | key={key} ---")
+            if key in processed_keys:
+                continue
+
+            button = get_button_by_key(active_config["xpath"], active_config["key_attr"],
+                                        active_config["key_via_parent"], key)
+            if button is None:
+                skip_reasons[key] = "button not found on re-query (DOM changed)"
+                self.dbg(f"[{key}] SKIP: {skip_reasons[key]}")
+                continue
+
+            try:
                 self.driver.execute_script(
-                    "arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", button
+                    "arguments[0].scrollIntoView({behavior: 'instant', block: 'center'});", button
                 )
-                time.sleep(0.2)
+                time.sleep(0.15)  # small settle buffer for scroll, kept intentionally small
 
-                # Click or hover
-                if active_config['hover']:
+                t0 = time.time()
+                if active_config["hover"]:
                     ActionChains(self.driver).move_to_element(button).perform()
-                    self.dbg("Hovered over button.")
                 else:
                     try:
                         WebDriverWait(self.driver, max_wait_time).until(EC.element_to_be_clickable(button))
                         button.click()
-                        self.dbg("Clicked button normally.")
                     except ElementClickInterceptedException:
-                        self.dbg("Normal click intercepted, falling back to JS click.")
+                        self.dbg(f"[{key}] click intercepted, falling back to JS click.")
                         self.driver.execute_script("arguments[0].click();", button)
 
-                self.dbg("Sleeping 0.5s for dynamic content...")
-                time.sleep(0.5)
-
-                # Scrape visible links
-                self.dbg(f"Waiting for links with class '{link_class}'...")
+                # Wait for the flyout's links to become visible (state-based, not a fixed sleep)
                 try:
                     WebDriverWait(self.driver, max_wait_time).until(
-                        lambda d: d.find_elements(By.XPATH, link_class)
+                        lambda d: any(l.is_displayed() for l in d.find_elements(By.XPATH, link_class))
                     )
+                    wait_time = time.time() - t0
                     all_links = self.driver.find_elements(By.XPATH, link_class)
-                    self.dbg(f"Total '{link_class}' links found: {len(all_links)}")
                     visible_links = [l for l in all_links if l.is_displayed()]
-                    self.dbg(f"Visible '{link_class}' links: {len(visible_links)}")
-
                     urls = [l.get_attribute("href") for l in visible_links if l.get_attribute("href")]
                     content_data[key] = urls
-                    self.dbg(f"Extracted {len(urls)} URLs for key '{key}':")
-                    for j, url in enumerate(urls, 1):
-                        self.dbg(f"  {j}. {url[:80]}{'...' if len(url) > 80 else ''}")
-
-                except Exception as e:
-                    self.dbg(f"Failed to find '{link_class}' links: {type(e).__name__}: {e}")
+                    self.dbg(f"[{key}] captured {len(urls)} URL(s) after {wait_time:.2f}s")
+                except TimeoutException:
+                    skip_reasons[key] = f"no visible links after {max_wait_time}s wait"
                     content_data[key] = []
+                    self.dbg(f"[{key}] SKIP: {skip_reasons[key]}")
 
-                # Close dialog before moving to next button
-                if not active_config['hover']:
-                    self.dbg("Attempting to close citation dialog...")
-                    try_close_dialog()
+                if active_config["hover"]:
+                    dismiss_hover()
                 else:
-                    textarea = self.driver.find_element(By.CSS_SELECTOR, 'textarea.ITIRGe')
-                    ActionChains(self.driver).move_to_element(textarea).perform()
-                    self.dbg("Moved to textarea to dismiss hover.")
-                time.sleep(0.2)
+                    if not try_close_dialog():
+                        self.dbg(f"[{key}] close-dialog button not found (may already be closed).")
 
-                processed_buttons.add(key)
+                processed_keys.add(key)
+                time.sleep(random.uniform(0.05, 0.15))
 
-                pause = random.uniform(0.05, 0.15)
-                self.dbg(f"Pausing {pause:.2f}s before next button...")
-                time.sleep(pause)
-
+            except StaleElementReferenceException:
+                skip_reasons[key] = "stale element reference"
+                self.dbg(f"[{key}] SKIP: {skip_reasons[key]}")
+                continue
             except Exception as e:
-                self.dbg(f"Unhandled error on button {i + 1}: {type(e).__name__}: {e}")
-                try_close_dialog()  # Attempt cleanup even on error
+                skip_reasons[key] = f"{type(e).__name__}: {e}"
+                self.dbg(f"[{key}] SKIP: unhandled error — {skip_reasons[key]}")
+                try_close_dialog()
+                dismiss_hover()
 
-        self.dbg(f"Done. Collected citations for {len(content_data)} keys:")
-        for key, urls in content_data.items():
-            self.dbg(f"  {key}: {len(urls)} URLs")
-            for j, url in enumerate(urls, 1):
-                self.dbg(f"    {j}. {url[:80]}{'...' if len(url) > 80 else ''}")
+        self.dbg(f"Done. {len(content_data)}/{len(keyed)} keys processed, "
+                  f"{sum(1 for v in content_data.values() if v)} with links.")
+        if skip_reasons:
+            self.dbg(f"{len(skip_reasons)} key(s) had issues:")
+            for k, reason in skip_reasons.items():
+                self.dbg(f"  {k}: {reason}")
 
         return content_data
 
