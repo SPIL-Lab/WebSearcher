@@ -1,3 +1,6 @@
+import resource
+import logging
+
 from importlib import metadata
 from pathlib import Path
 
@@ -48,7 +51,10 @@ class SearchEngine:
                 "requests": RequestsConfig.create(requests_config),
             }
         )
+        # print("before log:", len(logging.getLogger("__main__").handlers))
         self.log = logger.Logger(**self.config.log.model_dump()).start(__name__)
+        self._owned_handlers = list(self.log.handlers)
+        # print("after log:", len(logging.getLogger("__main__").handlers))
         self.session_data = {
             "method": self.config.method.value,
             "version": WS_VERSION,
@@ -193,3 +199,28 @@ class SearchEngine:
         results_output = [{**result, **result_metadata} for result in self.parsed.results]
         fp = append_to if append_to else Path(save_dir) / "results.json"
         utils.write_lines(results_output, fp)
+
+    def close_log(self):
+        """Explicitly close and detach this instance's log handlers."""
+        for h in self._owned_handlers:
+            try:
+                h.close()
+            except Exception:
+                pass
+            try:
+                self.log.removeHandler(h)
+            except Exception:
+                pass
+        self._owned_handlers = []
+
+    def cleanup(self):
+        """Full teardown: browser + log handlers."""
+        if hasattr(self, "searcher") and hasattr(self.searcher, "cleanup"):
+            self.searcher.cleanup()
+        self.close_log()
+
+    def __del__(self):
+        try:
+            self.cleanup()
+        except Exception:
+            pass

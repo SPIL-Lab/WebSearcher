@@ -1,5 +1,6 @@
 import time
 import random
+import os
 from datetime import datetime, timezone
 
 import orjson
@@ -171,6 +172,7 @@ class SeleniumDriver:
         finally:
             self.delete_cookies()
 
+        self.cleanup()
         return response_output
 
     def dbg(self, *args):
@@ -546,11 +548,37 @@ class SeleniumDriver:
         Returns:
             bool: True if cleanup was successful or not needed, False if cleanup failed
         """
+        print('Running cleanup')
         if self.driver:
             try:
                 self.delete_cookies()
                 self.close_all_windows()
+                service_process = getattr(self.driver, "service", None)
+                service_process = getattr(service_process, "process", None)
                 self.driver.quit()
+                try:
+                    self.driver.command_executor.close()
+                except Exception as e:
+                    self.log.warning(f"Failed to close command executor: {e}")
+
+                if service_process is not None:
+                    # Close the parent-side pipe fds Popen opened for the
+                    # chromedriver subprocess's stdin/stdout/stderr — quit()
+                    # kills the child process but never closes these.
+                    for stream in (service_process.stdin, service_process.stdout, service_process.stderr):
+                        if stream is not None:
+                            try:
+                                stream.close()
+                            except Exception:
+                                pass
+                    try:
+                        service_process.wait(timeout=5)
+                    except Exception as e:
+                        self.log.warning(f"chromedriver did not exit cleanly: {e}")
+
+                # print('Quited driver')
+                self.reap_zombie_children()
+                # print('reaping zombies')
                 self.driver = None
                 self.log.debug("Browser successfully closed")
                 return True
@@ -586,3 +614,13 @@ class SeleniumDriver:
             self.cleanup()
         except Exception:
             pass
+
+    def reap_zombie_children(self):
+        while True:
+            try:
+                pid, status = os.waitpid(-1, os.WNOHANG)
+                if pid == 0:
+                    break  # no more zombies to reap
+            except ChildProcessError:
+                break  # no children at all
+            # print(f"Reaped zombie pid={pid} status={status}")

@@ -1,6 +1,7 @@
 """Configure a logger using a dictionary"""
 
 import logging.config
+import logging
 
 # Setting
 LOG_LEVEL_DEFAULT = "INFO"
@@ -102,5 +103,12 @@ class Logger:
         }
 
     def start(self, name: str | None = __name__) -> logging.Logger:
+        root = logging.getLogger()
+        for h in root.handlers[:]:
+            try:
+                h.close()
+            finally:
+                root.removeHandler(h)
+
         logging.config.dictConfig(self.log_config)
         return logging.getLogger(name)
