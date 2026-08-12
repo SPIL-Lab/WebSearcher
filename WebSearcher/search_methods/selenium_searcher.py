@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import orjson
 import undetected_chromedriver as uc
-from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException
+from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException, StaleElementReferenceException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
@@ -43,7 +43,7 @@ TRANSLATIONS = {
         "view_related": "Ver enlaces relacionados",
         "search": "Buscar"
     },
-    "pt-br": {
+    "pt-BR": {
         "reject_all": "Rejeitar tudo",
         "show_all": "Mostrar tudo",
         "show_more": "Mostrar mais",
@@ -132,6 +132,7 @@ class SeleniumDriver:
         )
 
         try:
+            print(search_params.url)
             self.driver.get(search_params.url)
             time.sleep(2)
 
