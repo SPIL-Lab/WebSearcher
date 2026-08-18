@@ -2,6 +2,7 @@ import time
 import random
 import os
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 import orjson
 import undetected_chromedriver as uc
@@ -136,7 +137,6 @@ class SeleniumDriver:
             self.driver.get(search_params.url)
             time.sleep(2)
 
-            # Do basic page elements load
             if search_params.ai_mode:
                 WebDriverWait(self.driver, 10).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, "textarea.ITIRGe"))
@@ -148,10 +148,11 @@ class SeleniumDriver:
             
 
             time.sleep(2)
-            response_output.html = self.driver.page_source
             response_output.url = self.driver.current_url
             response_output.response_code = 200
             response_output.interactive_data = {}
+
+            citation_data, dropdown_data = [], []
 
             # Expand AI overview if requested
             if search_params.ai_expand:
@@ -160,13 +161,18 @@ class SeleniumDriver:
                     len_diff = len(expanded_html) - len(response_output.html)
                     self.log.debug(f"SERP | expanded html | len diff: {len_diff}")
                     response_output.html = expanded_html
-                    citation_data = self.collect_citations(search_params)
+                    citation_data, dropdown_data, button_data, error_data = self.collect_citations(search_params)
                 response_output.interactive_data['citations'] = citation_data
+                response_output.interactive_data['dropdowns'] = dropdown_data
+                response_output.interactive_data['button_info'] = button_data
+                response_output.interactive_data['error'] = error_data
 
             if not search_params.ai_mode:
                 response_output.interactive_data['auto'], response_output.interactive_data['auto_space'] = self.collect_autosuggest(search_params)
             else:
                 response_output.interactive_data['auto'], response_output.interactive_data['auto_space'] = None, None
+
+            response_output.html = self.driver.page_source
 
         except Exception as e:
             self.log.exception(f"SERP | Chromedriver error | {str(e)}")
@@ -261,9 +267,12 @@ class SeleniumDriver:
         """Collect citation URLs by clicking each source button and scraping visible links."""
 
         content_data = {}
+        dropdown_data = {}
+        button_data = {}
         processed_buttons = set()
         processed_keys = set()
         skip_reasons = {}
+        error = False
         
         t = TRANSLATIONS[search_params.lang]
         BUTTON_CONFIGS = {
@@ -345,11 +354,31 @@ class SeleniumDriver:
                     continue
             return None
 
+        def scroll_to_load_all(self, xpath, max_idle_rounds=1, scroll_pause=1.6, max_rounds=40):
+            last_count = -1
+            idle_rounds = 0
+            for round_num in range(max_rounds):
+                self.driver.execute_script("window.scrollBy(0, window.innerHeight * 0.9);")
+                time.sleep(scroll_pause)
+                current_count = len(self.driver.find_elements(By.XPATH, xpath))
+                self.dbg(f"[scroll round {round_num}] elements found: {current_count}")
+                if current_count <= last_count:
+                    idle_rounds += 1
+                    if idle_rounds >= max_idle_rounds:
+                        self.dbg("No new elements after repeated scrolls, stopping.")
+                        break
+                else:
+                    idle_rounds = 0
+                last_count = current_count
+            self.driver.execute_script("window.scrollTo(0, 0);")
+            time.sleep(0.2)
+
         mode = "ai_mode" if search_params.ai_mode else "standard"
         configs = BUTTON_CONFIGS[mode]
 
         target_buttons, link_class, active_config = [], None, None
         for config in configs:
+            scroll_to_load_all(self, config["xpath"])
             all_buttons = self.driver.find_elements(By.XPATH, config["xpath"])
             visible = [b for b in all_buttons if b.is_displayed()]
             if visible:
@@ -389,9 +418,18 @@ class SeleniumDriver:
                 self.driver.execute_script(
                     "arguments[0].scrollIntoView({behavior: 'instant', block: 'center'});", button
                 )
-                time.sleep(0.15)  # small settle buffer for scroll, kept intentionally small
+                time.sleep(0.15)
 
                 t0 = time.time()
+                try:
+                    sibling_a = button.find_element(By.XPATH, "preceding-sibling::a[1]")
+                    button_data[key] = {
+                        "aria_label": sibling_a.get_attribute("aria-label"),
+                        "href": sibling_a.get_attribute("href"),
+                    }
+                except NoSuchElementException:
+                    button_data[key] = {"aria_label": None, "href": None}
+
                 if active_config["hover"]:
                     ActionChains(self.driver).move_to_element(button).perform()
                 else:
@@ -402,7 +440,6 @@ class SeleniumDriver:
                         self.dbg(f"[{key}] click intercepted, falling back to JS click.")
                         self.driver.execute_script("arguments[0].click();", button)
 
-                # Wait for the flyout's links to become visible (state-based, not a fixed sleep)
                 try:
                     WebDriverWait(self.driver, max_wait_time).until(
                         lambda d: any(l.is_displayed() for l in d.find_elements(By.XPATH, link_class))
@@ -413,9 +450,36 @@ class SeleniumDriver:
                     urls = [l.get_attribute("href") for l in visible_links if l.get_attribute("href")]
                     content_data[key] = urls
                     self.dbg(f"[{key}] captured {len(urls)} URL(s) after {wait_time:.2f}s")
+                    self.dbg(f"[{key}] URLs:\n" + "\n".join(urls))
+                    print(
+                        f"[{key}] button aria-label={button_data[key]['aria_label']!r}\n"
+                        f"href={button_data[key]['href']!r}"
+                    )
+
+                    button_href = button_data[key]["href"]
+                    if button_href and urls:
+                        button_domain = urlparse(button_href).netloc
+                        first_domain = urlparse(urls[0]).netloc
+                        if button_domain and first_domain and button_domain != first_domain:
+                            self.dbg(f"\n[{key}] !!! DOMAIN MISMATCH: button={button_domain} vs first_url={first_domain} !!!\n")
+                            error = True
+                    try:
+                        container = self.driver.find_element(
+                            By.XPATH,
+                            "//div[contains(@class, 'jR6h') and contains(@class, 'WaKIwf') and contains(@class, 'Q1xFeb')]"
+                        )
+                        dropdown_data[key] = container.get_attribute("outerHTML")
+                        self.dbg(f"[{key}] captured dropdown HTML ({len(dropdown_data[key])} chars)")
+                    except NoSuchElementException:
+                        dropdown_data[key] = None
+                        self.dbg(f"[{key}] dropdown container not found for HTML capture.")
+
                 except TimeoutException:
                     skip_reasons[key] = f"no visible links after {max_wait_time}s wait"
                     content_data[key] = []
+                    dropdown_data[key] = []
+                    error = True
+                    # time.sleep(60)
                     self.dbg(f"[{key}] SKIP: {skip_reasons[key]}")
 
                 if active_config["hover"]:
@@ -430,10 +494,12 @@ class SeleniumDriver:
             except StaleElementReferenceException:
                 skip_reasons[key] = "stale element reference"
                 self.dbg(f"[{key}] SKIP: {skip_reasons[key]}")
+                error = True
                 continue
             except Exception as e:
                 skip_reasons[key] = f"{type(e).__name__}: {e}"
                 self.dbg(f"[{key}] SKIP: unhandled error — {skip_reasons[key]}")
+                error = True
                 try_close_dialog()
                 dismiss_hover()
 
@@ -444,7 +510,7 @@ class SeleniumDriver:
             for k, reason in skip_reasons.items():
                 self.dbg(f"  {k}: {reason}")
 
-        return content_data
+        return content_data, dropdown_data, button_data, error
 
     def collect_autosuggest(self, search_params):
 
