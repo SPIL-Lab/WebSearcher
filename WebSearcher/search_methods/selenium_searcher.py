@@ -386,8 +386,9 @@ class SeleniumDriver:
                 break
 
         if not target_buttons:
+            error = True
             self.dbg("No visible buttons found across all configs.")
-            return content_data
+            return content_data, dropdown_data, button_data, error
 
         keyed = []
         for b in target_buttons:
