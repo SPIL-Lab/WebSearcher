@@ -36,7 +36,15 @@ TRANSLATIONS = {
         "view_related": "Zugehörige Links ansehen",
         "search": "Suche"
     },
-    "es": {
+    "es-US": {
+        "reject_all": "Rechazar todo",
+        "show_all": "Mostrar todo",
+        "show_more": "Mostrar todo",
+        "not_now": "Ahora no",
+        "view_related": "Ver enlaces relacionados",
+        "search": "Buscar"
+    },
+    "es-DO": {
         "reject_all": "Rechazar todo",
         "show_all": "Mostrar todo",
         "show_more": "Mostrar todo",
@@ -95,8 +103,20 @@ class SeleniumDriver:
 
     def init_driver(self) -> None:
         """Initialize Chrome driver with selenium-specific config"""
-        self.log.debug(f"SERP | init uc chromedriver | kwargs: {self.config.__dict__}")
-        self.driver = uc.Chrome(**self.config.__dict__)
+
+        kwargs = self.config.__dict__.copy()
+        lang = kwargs.pop('lang', None)
+        options = uc.ChromeOptions()
+        if lang:
+            options.add_argument(f"--lang={lang}")
+            options.add_experimental_option("prefs", {"intl.accept_languages": f"{lang},{lang.split('-')[0]}"})
+        kwargs["options"] = options
+        self.log.debug(f"SERP | init uc chromedriver | kwargs: {kwargs}")
+        self.driver = uc.Chrome(**kwargs)
+
+
+        # self.log.debug(f"SERP | init uc chromedriver | kwargs: {self.config.__dict__}")
+        # self.driver = uc.Chrome(**self.config.__dict__)
 
         # Log version information
         self.browser_info = {

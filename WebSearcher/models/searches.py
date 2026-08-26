@@ -14,6 +14,7 @@ class SearchParams(BaseConfig):
     qry: str = Field("", description="The search query text")
     num_results: int | None = Field(None, description="Number of results to return")
     lang: str | None = Field(None, description="Language code (e.g., 'en')")
+    use_local_lang: bool | None = Field(False, description="Use language code only for processing/browser caching, not for URL")
     loc: str | None = Field(None, description="Location in Canonical Name format")
     base_url: str = Field("https://www.google.com/search", description="Base search engine URL")
     ai_expand: bool = Field(False, description="Expand AI overviews if present")
@@ -29,9 +30,13 @@ class SearchParams(BaseConfig):
         if self.ai_mode:
             params["udm"] = "50"
 
+        if self.use_local_lang:
+            lang = None
+        else:
+            lang = self.lang
         opt_params = {
             "num": self.num_results,
-            "hl": self.lang,
+            "hl": lang,
             "uule": locations.convert_canonical_name_to_uule(self.loc) if self.loc else None,
         }
         opt_params = {k: v for k, v in opt_params.items() if v and v not in {"None", "nan"}}

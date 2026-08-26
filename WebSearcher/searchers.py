@@ -80,6 +80,7 @@ class SearchEngine:
         num_results: int | None = None,
         ai_expand: bool = False,
         ai_mode: bool = False,
+        use_local_lang: bool = False,
         headers: dict[str, str] = {},
     ):
         """Conduct a search and save HTML
@@ -100,6 +101,7 @@ class SearchEngine:
                 "qry": str(qry),
                 "loc": str(location) if location is not None else "",
                 "lang": str(lang) if lang is not None else "",
+                "use_local_lang": use_local_lang,
                 "num_results": num_results,
                 "ai_expand": ai_expand,
                 "ai_mode": ai_mode,
