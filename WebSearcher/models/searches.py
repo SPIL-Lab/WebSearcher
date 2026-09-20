@@ -31,7 +31,7 @@ class SearchParams(BaseConfig):
 
         opt_params = {
             "num": self.num_results,
-            "hl": self.lang,
+            # "hl": self.lang,
             "uule": locations.convert_canonical_name_to_uule(self.loc) if self.loc else None,
         }
         opt_params = {k: v for k, v in opt_params.items() if v and v not in {"None", "nan"}}

@@ -31,6 +31,7 @@ class SeleniumConfig(BaseConfig):
     version_main: int | None = None
     use_subprocess: bool = False
     driver_executable_path: str = ""
+    lang: str = 'en-US'
 
 
 class RequestsConfig(BaseConfig):
