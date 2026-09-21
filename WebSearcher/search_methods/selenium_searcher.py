@@ -114,10 +114,6 @@ class SeleniumDriver:
         self.log.debug(f"SERP | init uc chromedriver | kwargs: {kwargs}")
         self.driver = uc.Chrome(**kwargs)
 
-
-        # self.log.debug(f"SERP | init uc chromedriver | kwargs: {self.config.__dict__}")
-        # self.driver = uc.Chrome(**self.config.__dict__)
-
         # Log version information
         self.browser_info = {
             "browser_id": "",
