@@ -1,4 +1,3 @@
-import resource
 import logging
 
 from importlib import metadata

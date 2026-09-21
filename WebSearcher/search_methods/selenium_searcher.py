@@ -53,7 +53,7 @@ TRANSLATIONS = {
         "search": "Buscar"
     },
     "pt-BR": {
-        "reject_all": "Rejeitar tudo",
+        "reject_all": "Recusar tudo",
         "show_all": "Mostrar tudo",
         "show_more": "Mostrar mais",
         "not_now": "Agora não",
@@ -114,9 +114,8 @@ class SeleniumDriver:
         self.log.debug(f"SERP | init uc chromedriver | kwargs: {kwargs}")
         self.driver = uc.Chrome(**kwargs)
 
-
-        # self.log.debug(f"SERP | init uc chromedriver | kwargs: {self.config.__dict__}")
-        # self.driver = uc.Chrome(**self.config.__dict__)
+        print(lang)
+        print(options)
 
         # Log version information
         self.browser_info = {
@@ -635,8 +634,8 @@ class SeleniumDriver:
         Returns:
             bool: True if cleanup was successful or not needed, False if cleanup failed
         """
-        print('Running cleanup')
         if self.driver:
+            print('Running cleanup')
             try:
                 self.delete_cookies()
                 self.close_all_windows()
@@ -648,23 +647,24 @@ class SeleniumDriver:
                 except Exception as e:
                     self.log.warning(f"Failed to close command executor: {e}")
 
-                if service_process is not None:
-                    # Close the parent-side pipe fds Popen opened for the
-                    # chromedriver subprocess's stdin/stdout/stderr — quit()
-                    # kills the child process but never closes these.
-                    for stream in (service_process.stdin, service_process.stdout, service_process.stderr):
-                        if stream is not None:
-                            try:
-                                stream.close()
-                            except Exception:
-                                pass
-                    try:
-                        service_process.wait(timeout=5)
-                    except Exception as e:
-                        self.log.warning(f"chromedriver did not exit cleanly: {e}")
+                if hasattr(os, 'WNOHANG'):
+                    if service_process is not None:
+                        # Close the parent-side pipe fds Popen opened for the
+                        # chromedriver subprocess's stdin/stdout/stderr — quit()
+                        # kills the child process but never closes these.
+                        for stream in (service_process.stdin, service_process.stdout, service_process.stderr):
+                            if stream is not None:
+                                try:
+                                    stream.close()
+                                except Exception:
+                                    pass
+                        try:
+                            service_process.wait(timeout=5)
+                        except Exception as e:
+                            self.log.warning(f"chromedriver did not exit cleanly: {e}")
 
-                # print('Quited driver')
-                self.reap_zombie_children()
+                    # print('Quited driver')
+                    self.reap_zombie_children()
                 # print('reaping zombies')
                 self.driver = None
                 self.log.debug("Browser successfully closed")
@@ -705,9 +705,9 @@ class SeleniumDriver:
     def reap_zombie_children(self):
         while True:
             try:
-                pid, status = os.waitpid(-1, os.WNOHANG)
-                if pid == 0:
-                    break  # no more zombies to reap
+                if hasattr(os, 'WNOHANG'):
+                    pid, status = os.waitpid(-1, os.WNOHANG)
+                    if pid == 0:
+                        break  # no more zombies to reap
             except ChildProcessError:
                 break  # no children at all
-            # print(f"Reaped zombie pid={pid} status={status}")
